@@ -28,8 +28,9 @@ def home():
     f"___________________________________________________________________________<br/>"
     f"<br/>"
     f"Include one of the following routes in the url for analysis<br/>"
-    f"on precipitation, data gathering stations or temperature observations<br/>"
-    f"in Hawaii for the period 2016-08-23 through 2017-08-23:<br/>"
+    f"on precipitation for the period 2016-08-23 through 2017-08-23 from all stations,<br/>"
+    f"data gathering stations or temperature observations from the period 2016-08-23 through<br/>"
+    f"2017-08-23 for station USC00519281 in Waihee, Hawaii:<br/>"
     f"<br/>"
     f"/api/v1.0/precipitation<br/>"
     f"/api/v1.0/stations<br/>"
@@ -38,19 +39,16 @@ def home():
     f"_____________________________________________________________________________<br/>"
     f"<br/>"
     f"Include the following route in your url plus a start date of<br/>"
-    f"your choosing to see temperature observations for a specific period.<br/>"
-    f"NOTE: The range of available start dates:  2016-08-23 through 2017-08-22<br/>"
-    f"Please use this date format within the url:  yyyy-mm-dd<br/>"
+    f"your choosing to see minimum, maximum and average temperatures for a specific period.<br/>"
+    f"Please use this date format within the url:  yyyy-mm-dd.<br/>"
     f"<br/>"
     f"/api/v1.0/<start><br/>"
     f"<br/>"
     f"_____________________________________________________________________________<br/>"
     f"<br/>"
     f"Include the following route in your url plus start and end dates of<br/>"
-    f"your choosing to see temperature observations for a specific period.<br/>"
-    f"NOTE: The range of available start dates:  2016-08-23 through 2017-08-22<br/>"
-    f"The range of available end dates: 2016-08-24 through 2017-08-23<br/>"
-    f"Please use this date format within the url:  yyyy-mm-dd/yyyy-mm-dd<br/>"
+    f"your choosing to see minimum, maximum and average temperatures for a specific period.<br/>"
+    f"Please use this date format within the url:  yyyy-mm-dd/yyy.-mm-dd<br/>"
     f"<br/>"
     f"/api/v1.0/<start>/<end><br/>")   
    
@@ -59,14 +57,15 @@ def home():
 @app.route("/api/v1.0/precipitation")
 def precip():
     session = Session(engine)  
-
+    
     # Date variables
     query_date_end = dt.date(2017, 8, 23)
     query_date = query_date_end - dt.timedelta(days=365)
 
     # Query for precipitation data over the last 12 months of the dataset
-    year_data = session.query(Measurement.date, Measurement.prcp).filter(Measurement.date >= query_date).\
-    filter(Measurement.date <= query_date_end).filter(Measurement.prcp.isnot(None)).all()
+    year_data = session.query(Measurement.date, Measurement.prcp).\
+    filter(Measurement.date >= query_date).\
+    filter(Measurement.prcp.isnot(None)).all()
 
     session.close()
 
@@ -85,14 +84,14 @@ def station_list():
     station_query = session.query(Station.station, Station.name).all()
     
     session.close()
-
+    
     sqlist = []
     for station, name in station_query:
         station_dict = {}
         station_dict["station"] = station
         station_dict["station_name"] = name
         sqlist.append(station_dict)
-    
+         
     return jsonify(sqlist)
   
 # Query and list TOBS for most active station
@@ -110,15 +109,15 @@ def tobs_data():
     query_date_end = dt.date(2017, 8, 23)
     query_date = query_date_end - dt.timedelta(days=365)
     
-    year_data_tobs = session.query(Measurement.date, Measurement.tobs).filter(Measurement.date >= query_date).\
-    filter(Measurement.date <= query_date_end).filter(Measurement.station == asq[0]).all()
+    year_data_tobs = session.query(Measurement.tobs).filter(Measurement.date >= query_date).\
+    filter(Measurement.station == asq[0]).all()
 
     station_tobs = []
-    for date, tobs in year_data_tobs:
-        tobs_dict = {}
-        tobs_dict["Date"] = date
-        tobs_dict["TOBS"] = tobs
-        station_tobs.append(tobs_dict)
+    index = 0
+    for tobs in year_data_tobs:
+        station_tobs.append(year_data_tobs[index])
+        index += 1
+        
     session.close()
     return jsonify(station_tobs)
 
@@ -126,29 +125,18 @@ def tobs_data():
 @app.route("/api/v1.0/<start>")
 def tobs_start(start):  
     session = Session(engine)  
-    
-    # Determine most active station
-    active_station_query = session.query(Measurement.station).\
-    group_by(Measurement.station).order_by(func.count(Measurement.station).desc()).first()
-
-    asq = list(active_station_query)
-
-    # Date variables
-    start_date = dt.date.fromisoformat(start)
-    query_date_end = dt.date(2017, 8, 23)
-   
+        
     sel = [func.min(Measurement.tobs),
         func.avg(Measurement.tobs),
         func.max(Measurement.tobs)]
 
-    active_station_temp = session.query(*sel).\
-        filter(Measurement.station == asq[0]).filter(Measurement.date >=start_date).\
-        filter(Measurement.date <= query_date_end).all()
-    
+    start_temp = session.query(*sel).\
+    filter(Measurement.date >=start).all()       
+   
     session.close()
 
-    # Convert active_station_temp query results to list:
-    ast = list(*active_station_temp)
+    # Convert query results to list:
+    ast = list(*start_temp)
 
     return jsonify(ast)
 
@@ -156,29 +144,19 @@ def tobs_start(start):
 @app.route("/api/v1.0/<start>/<end>")
 def tobs_end(start, end):  
     session = Session(engine)  
-    
-    # Determine most active station
-    active_station_query = session.query(Measurement.station).\
-    group_by(Measurement.station).order_by(func.count(Measurement.station).desc()).first()
-
-    asq = list(active_station_query)
-
-     # Date variables
-    start_date = dt.date.fromisoformat(start)
-    query_date_end = dt.date.fromisoformat(end)
-    
+       
     sel = [func.min(Measurement.tobs),
         func.avg(Measurement.tobs),
         func.max(Measurement.tobs)]
 
-    station_end_temp = session.query(*sel).\
-        filter(Measurement.station == asq[0]).filter(Measurement.date >=start_date).\
-        filter(Measurement.date <= query_date_end).all()
+    end_temp = session.query(*sel).\
+        filter(Measurement.date >=start).\
+        filter(Measurement.date <= end).all()
     
     session.close()
 
     # Convert ast results to list:
-    est = list(*station_end_temp)
+    est = list(*end_temp)
 
     return jsonify(est)
 
