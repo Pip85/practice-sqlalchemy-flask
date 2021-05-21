@@ -1,4 +1,6 @@
  sqlalchemy-challenge
+
+
  In this challenge we begin with a sqlite database that includes two files,
  one listing temperature observation stations in Hawaii and another that 
  includes precipitation and temperature observatons over a period from
